@@ -1,0 +1,23 @@
+This is a chat sever with adirectory so users can see all of the possible cha tservers and decide which to join. the followings steps will walk you throh how to propperly start up the servers and client
+
+1. Copy the files to your own directory.
+
+2. Modify inet.h to reflect the host you are currently logged into.
+   Also, modify the port numbers to be used to reduce the likelihood
+   of conflicting with another server.
+
+3. Compile the source code using the command: make
+
+4. Start the directory servers in the background: ./directoryServer2 &; 
+
+5. Start the chat server in the back ground with 2 comand line arguments. The first is the single  
+   word topic name, and the second is the socket number you will want it to listen on above 40000 but less than 65535, you will set it in the background ex: ./chatServer2 test 40985 &
+
+6. Start the client on the same or another host in the foreground: ./chatClient2
+
+7. To connect the client to a server you must imput a port and ip from the list, then will connect 
+   you to that topic server.
+
+8. All spaces must be replaced usg an '_', 
+
+9. Remember to kill the server before logging off.

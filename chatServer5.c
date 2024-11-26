@@ -12,6 +12,7 @@
 
 
 int port;
+fd_set readfds, serfds;
 
 // Structure to represent a connected client
 struct client {
@@ -53,7 +54,8 @@ SSL_CTX *init_openssl(const char *cert_file, const char *key_file) {
 void register_with_directory_server(const char *name) {
     int sock;
     struct sockaddr_in dir_addr;
-
+    int topic_accept = 0;
+    char validation = "3";
     // Create a socket to connect to the Directory Server
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
@@ -73,15 +75,46 @@ void register_with_directory_server(const char *name) {
         close(sock);
         exit(EXIT_FAILURE);
     }
-
-    // Send the registration command
-    write(sock, "REGISTER", strlen("REGISTER"));
-
-    // Send the registration details (name and address)
     char buffer[MAX];
-    snprintf(buffer, sizeof(buffer), "%s:%s:%d", name, SERV_TCP_PORT, port);
-    write(sock, buffer, strlen(buffer));
-
+    snprintf(buffer, MAX, "* %s:%d", name, port);
+    
+    while(topic_accept == 0){
+            FD_ZERO(&readfds);
+			FD_SET(sock, &readfds);
+            
+			if (select(sock+1, &readfds, NULL, NULL, NULL) > 0)
+			{
+				/* Check whether there's a message from the server to read */
+				if (FD_ISSET(sock, &readfds)) {
+					if ((read(sock, validation, MAX)) <= 0) {
+						printf("server has shut down\n");
+						close(dirsockfd);
+						exit(0);
+					} else {
+						switch(validation[0])
+                        {
+                            case '1':
+                                printf("topic is accpeted\n");
+                                topic_accept =1;
+                                break;
+                            case '2':
+                                printf("topic denied exiting\n");
+                                close(sock);
+                                exit(1);
+                                break;
+                            case '3':
+                                write(sock, buffer, MAX);
+                                break;
+                            default:
+                                printf("nothing that was supposed to be made it\n");
+                                exit(1);
+                                
+                        }
+					}
+				}
+			}
+    }
+       
     close(sock);
     printf("Registered with Directory Server as %s\n", name);
 }
@@ -145,12 +178,12 @@ void handle_client_communication(SSL_CTX *ctx, struct client *client) {
     }
 
     // Read data from the client
-    while ((bytes = SSL_read(ssl, buffer, sizeof(buffer) - 1)) > 0) {
-        buffer[bytes] = '\0';
-        printf("%s: %s\n", client->name, buffer);
+    while ((bytes = SSL_read(ssl, buffer, MAX)) > 0) {
+       char outmes[MAX];
+        snprintf(outmes, MAX"%s: %s", client->name, buffer);
 
         // Broadcast the message to other clients
-        broadcast_message(buffer);
+        broadcast_message(outmes);
     }
 
     // Clean up and remove the client
@@ -167,13 +200,16 @@ int main(int argc, char **argv) {
 		printf("starting  %s\n", argv[0]);
 	}
 	if(argc == 3){
-        sscanf(argv[2],"%hu",&port);
-	    if (port < 40000 || port > 65535) 
+        if(0 < sscanf(argv[2],"%hu",&port))
         {
-		    printf("Invalid port number greater than 40000 and less than 65535\n");
-		    exit(1);
-	    }
+            if (port < 40000 || port > 65535) 
+            {
+                printf("Invalid port number greater than 40000 and less than 65535\n");
+                exit(1);
+            }
 		snprintf(s_out,MAX,"* %s %s",argv[1],argv[2]);
+        }
+	   
 	}
     else{
         printf("Did not have all arguments not\n");
@@ -181,11 +217,13 @@ int main(int argc, char **argv) {
         exit(1);
 
     // Initialize OpenSSL and load the Chat Server certificate
-    SSL_CTX *ctx = init_openssl("chatServer.crt", "chatServer.key");
+    char crt[MAX];
+    char key[MAX];
+    snprintf(crt,MAX,"%s.crt",argv[1]);
+    snprintf(key,MAX,"%s.key",argv[1]);
+    SSL_CTX *ctx = init_openssl(crt, key);
 
-    // Register the chat server with the Directory Server
-    register_with_directory_server("KSU Football");
-
+    
     // Create a TCP socket for the Chat Server
     int server_sock = socket(AF_INET, SOCK_STREAM, 0);
     if (server_sock < 0) {
@@ -203,6 +241,9 @@ int main(int argc, char **argv) {
         perror("Unable to bind Chat Server socket");
         exit(EXIT_FAILURE);
     }
+
+    // Register the chat server with the Directory Server
+    register_with_directory_server(argv[1], argv[2]);
 
     // Start listening for incoming connections
     if (listen(server_sock, MAX_CLIENTS) < 0) {

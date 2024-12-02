@@ -11,7 +11,7 @@
 #include "common.h"
 
 
-int port;
+unsigned short int port;
 fd_set readfds, serfds;
 
 // Structure to represent a connected client
@@ -26,6 +26,24 @@ LIST_HEAD(client_list, client) client_list;
 
 // Function to initialize OpenSSL
 SSL_CTX *init_openssl(const char *cert_file, const char *key_file) {
+    if (!cert_file || !*cert_file) {
+        fprintf(stderr, "Error: Certificate file path is NULL or empty\n");
+        return NULL;
+    }
+    if (!key_file || !*key_file) {
+        fprintf(stderr, "Error: Key file path is NULL or empty\n");
+        return NULL;
+    }
+
+    if (access(cert_file, R_OK) != 0) {
+        perror("Error: Cannot access certificate file");
+        return NULL;
+    }
+    if (access(key_file, R_OK) != 0) {
+        perror("Error: Cannot access key file");
+        return NULL;
+    }
+
     SSL_library_init();
     SSL_load_error_strings();
     OpenSSL_add_all_algorithms();
@@ -34,17 +52,21 @@ SSL_CTX *init_openssl(const char *cert_file, const char *key_file) {
     if (!ctx) {
         perror("Unable to create SSL context");
         ERR_print_errors_fp(stderr);
-        exit(EXIT_FAILURE);
+        return NULL;
     }
 
-    // Load server certificate and private key
     if (SSL_CTX_use_certificate_file(ctx, cert_file, SSL_FILETYPE_PEM) <= 0) {
         ERR_print_errors_fp(stderr);
-        exit(EXIT_FAILURE);
+        fprintf(stderr, "Failed to load certificate file: %s\n", cert_file);
+        SSL_CTX_free(ctx);
+        return NULL;
     }
+
     if (SSL_CTX_use_PrivateKey_file(ctx, key_file, SSL_FILETYPE_PEM) <= 0) {
         ERR_print_errors_fp(stderr);
-        exit(EXIT_FAILURE);
+        fprintf(stderr, "Failed to load key file: %s\n", key_file);
+        SSL_CTX_free(ctx);
+        return NULL;
     }
 
     return ctx;
@@ -211,7 +233,7 @@ int main(int argc, char **argv) {
                 exit(1);
             }
 		snprintf(s_out,MAX,"* %s %s",argv[1],argv[2]);
-        printf("all args and correct port");
+        printf("all args and correct port\n");
         }
 	   
 	}
@@ -225,8 +247,15 @@ int main(int argc, char **argv) {
     char key[MAX];
     snprintf(crt,MAX,"%s.crt",argv[1]);
     snprintf(key,MAX,"%s.key",argv[1]);
+    printf("Certificate file: %s\n", crt);
+    printf("Key file: %s\n", key);
+
     SSL_CTX *ctx = init_openssl(crt, key);
 
+    if (ctx == NULL) {
+        printf("Failed to initialize OpenSSL context\n");
+        exit(1);
+    }
     
     // Create a TCP socket for the Chat Server
     int server_sock = socket(AF_INET, SOCK_STREAM, 0);

@@ -91,6 +91,7 @@ void register_with_directory_server(const char *name) {
         exit(EXIT_FAILURE);
     }
 
+    //Error here 
     if (connect(sock, (struct sockaddr *)&dir_addr, sizeof(dir_addr)) < 0) {
         perror("Unable to connect to Directory Server");
         close(sock);

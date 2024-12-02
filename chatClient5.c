@@ -80,22 +80,28 @@ int main()
 			exit(1);
 		}
 
-		read(sockfd,s_in,MAX);
-		if(s_in[0] == '3'){
-			memset(s_out,0,sizeof(s_out));
-			snprintf(s_out,MAX,"%s","l");
-			write(sockfd,s_out,MAX);
+		 SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
+   		 SSL *ssl = SSL_new(ctx);
+   		 SSL_set_fd(ssl, sock);
+
+		if (SSL_connect(ssl) <= 0) {
+			ERR_print_errors_fp(stderr);
+			SSL_free(ssl);
+			SSL_CTX_free(ctx);
+			close(sock);
+			exit(EXIT_FAILURE);
 		}
 
+    // Send registration command
+   		 SSL_write(ssl, "c", MAX);
+
+
 		char form[MAX] = "topic:ip:port";
-		printf("printed in the following format(%s)\n",form);
-		while(strncmp(list,msg,500) != 0)
-		{
-			memset(list,0,sizeof(list));
-			read(sockfd,list,500);
-			printf("%s\n",list);
-			
+		while(form[0] != '&'){
+			SSL_read(ssl, form, MAX);// reads each line and prints the list
+			printf("%s\n",form);
 		}
+		
 
 		printf("Enter server to connect to in the format: port ip (ex 1423 124.252.33.2)\n");
 		while (!linked) 

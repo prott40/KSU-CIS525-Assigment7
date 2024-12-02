@@ -111,7 +111,7 @@ void register_with_directory_server(const char *name) {
     }
 
     // Send registration command
-    SSL_write(ssl, "REGISTER", strlen("REGISTER"));
+    SSL_write(ssl, "*", MAX);
 
     // Send server details
     char buffer[MAX];

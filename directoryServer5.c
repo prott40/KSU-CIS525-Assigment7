@@ -89,8 +89,11 @@ void handle_client_request(SSL *ssl) {
                  buffer[0] ? "\n" : "",  // Add newline if buffer not empty
                  server->name, 
                  server->address);
+                 SSL_write(ssl, buffer, MAX);
     }
-    SSL_write(ssl, buffer, strlen(buffer));
+    snprintf(buffer,MAX, "&");
+    SSL_write(ssl,buffer,MAX);// signifies end on list
+    
 }
 
 //handles registrations with 
@@ -181,9 +184,9 @@ int main() {
             int bytes = SSL_read(ssl, buffer, sizeof(buffer) - 1);
             if (bytes > 0) {
                 buffer[bytes] = '\0';
-                if (strcmp(buffer, "REGISTER") == 0) {
+                if (buffer[0] == '*') {
                     handle_registration(ssl);
-                } else if (strcmp(buffer, "GET_SERVERS") == 0) {
+                } else if (buffer[0] == 'c') {
                     handle_client_request(ssl);
                 } else {
                     fprintf(stderr, "Unknown command: %s\n", buffer);

@@ -85,10 +85,10 @@ void handle_client_request(SSL *ssl) {
     char buffer[MAX] = "";
     struct chat_server *server;
     LIST_FOREACH(server, &server_list, servers) {
-        strncat(buffer, server->name, sizeof(buffer) - strlen(buffer) - 1);
-        strncat(buffer, " - ", sizeof(buffer) - strlen(buffer) - 1);
-        strncat(buffer, server->address, sizeof(buffer) - strlen(buffer) - 1);
-        strncat(buffer, "\n", sizeof(buffer) - strlen(buffer) - 1);
+        snprintf(buffer, MAX, "%s%s-%s",
+                 buffer[0] ? "\n" : "",  // Add newline if buffer not empty
+                 server->name, 
+                 server->address);
     }
     SSL_write(ssl, buffer, strlen(buffer));
 }

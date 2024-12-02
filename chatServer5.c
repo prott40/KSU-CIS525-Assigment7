@@ -63,11 +63,13 @@ void register_with_directory_server(const char *name) {
         exit(EXIT_FAILURE);
     }
 
-    // Set up the Directory Server address
     memset(&dir_addr, 0, sizeof(dir_addr));
     dir_addr.sin_family = AF_INET;
-    dir_addr.sin_port = htons(SERV_HOST_ADDR);
-    inet_pton(AF_INET, SERV_TCP_PORT, &dir_addr.sin_addr);
+    dir_addr.sin_port = htons(SERV_TCP_PORT); // Port is stored here (converted to network byte order)
+    if (inet_pton(AF_INET, SERV_HOST_ADDR, &dir_addr.sin_addr) <= 0) {
+     perror("inet_pton failed");
+        exit(EXIT_FAILURE);
+    }
 
     // Connect to the Directory Server
     if (connect(sock, (struct sockaddr *)&dir_addr, sizeof(dir_addr)) < 0) {
@@ -209,6 +211,7 @@ int main(int argc, char **argv) {
                 exit(1);
             }
 		snprintf(s_out,MAX,"* %s %s",argv[1],argv[2]);
+        printf("all args and correct port");
         }
 	   
 	}
@@ -216,7 +219,7 @@ int main(int argc, char **argv) {
         printf("Did not have all arguments not\n");
         printf("closing\n");
         exit(1);
-
+    }
     // Initialize OpenSSL and load the Chat Server certificate
     char crt[MAX];
     char key[MAX];
@@ -266,4 +269,4 @@ int main(int argc, char **argv) {
 
     return 0;
 }
-}
+

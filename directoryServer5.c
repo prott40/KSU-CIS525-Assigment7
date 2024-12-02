@@ -113,7 +113,7 @@ int main() {
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = htons(SERV_TCP_PORT);
-    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_addr.s_addr = inet_addr(SERV_HOST_ADDR);
     if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         perror("Unable to bind socket");
         exit(EXIT_FAILURE);

@@ -72,81 +72,72 @@ SSL_CTX *init_openssl(const char *cert_file, const char *key_file) {
     return ctx;
 }
 
+//Bug might be here possibly
 // Function to register the chat server with the Directory Server
 void register_with_directory_server(const char *name) {
-    int sock;
-    struct sockaddr_in dir_addr;
-    int topic_accept = 0;
-    char validation[MAX] = "3";
-    // Create a socket to connect to the Directory Server
-    sock = socket(AF_INET, SOCK_STREAM, 0);
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
         perror("Unable to create socket for Directory Server");
         exit(EXIT_FAILURE);
     }
 
-    memset(&dir_addr, 0, sizeof(dir_addr));
+    struct sockaddr_in dir_addr = {0};
     dir_addr.sin_family = AF_INET;
-    dir_addr.sin_port = htons(SERV_TCP_PORT); // Port is stored here (converted to network byte order)
+    dir_addr.sin_port = htons(SERV_TCP_PORT);
+    
     if (inet_pton(AF_INET, SERV_HOST_ADDR, &dir_addr.sin_addr) <= 0) {
-     perror("inet_pton failed");
+        perror("inet_pton failed");
+        close(sock);
         exit(EXIT_FAILURE);
     }
 
-    // Connect to the Directory Server
     if (connect(sock, (struct sockaddr *)&dir_addr, sizeof(dir_addr)) < 0) {
         perror("Unable to connect to Directory Server");
         close(sock);
         exit(EXIT_FAILURE);
     }
-    char buffer[MAX];
-    snprintf(buffer, MAX, "* %s:%d", name, port);
-    
-    while(topic_accept == 0){
-            FD_ZERO(&readfds);
-			FD_SET(sock, &readfds);
-            
-			if (select(sock+1, &readfds, NULL, NULL, NULL) > 0)
-			{
-				/* Check whether there's a message from the server to read */
-				if (FD_ISSET(sock, &readfds)) {
-					if ((read(sock, validation, MAX)) <= 0) {
-						printf("server has shut down\n");
-						close(sock);
-						exit(0);
-					} else {
-						switch(validation[0])
-                        {
-                            case '1':
-                                printf("topic is accpeted\n");
-                                topic_accept =1;
-                                break;
-                            case '2':
-                                printf("topic denied exiting\n");
-                                close(sock);
-                                exit(1);
-                                break;
-                            case '3':
-                                write(sock, buffer, MAX);
-                                break;
-                            default:
-                                printf("nothing that was supposed to be made it\n");
-                                exit(1);
-                                
-                        }
-					}
-				}
-			}
+
+    // Establish SSL connection
+    SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
+    SSL *ssl = SSL_new(ctx);
+    SSL_set_fd(ssl, sock);
+
+    if (SSL_connect(ssl) <= 0) {
+        ERR_print_errors_fp(stderr);
+        SSL_free(ssl);
+        SSL_CTX_free(ctx);
+        close(sock);
+        exit(EXIT_FAILURE);
     }
-       
+
+    // Send registration command
+    SSL_write(ssl, "REGISTER", strlen("REGISTER"));
+
+    // Send server details
+    char buffer[MAX];
+    snprintf(buffer, MAX, "%s:%d", name, port);
+    SSL_write(ssl, buffer, strlen(buffer));
+
+    // Read response
+    char response[MAX];
+    int bytes = SSL_read(ssl, response, sizeof(response) - 1);
+    if (bytes > 0) {
+        response[bytes] = '\0';
+        printf("Directory Server response: %s\n", response);
+    }
+
+    SSL_shutdown(ssl);
+    SSL_free(ssl);
+    SSL_CTX_free(ctx);
     close(sock);
-    printf("Registered with Directory Server as %s\n", name);
 }
 
 // Function to handle incoming client connections
+// BUG POSSIBLY OCCURING HERE BECAUSE SERVER IS NOT ACCEPTING VIA SSL TO DIRECTORY
 void handle_new_connection(SSL_CTX *ctx, int server_sock) {
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
+
     int client_sock = accept(server_sock, (struct sockaddr *)&client_addr, &client_len);
     if (client_sock < 0) {
         perror("Unable to accept new client connection");
@@ -156,7 +147,9 @@ void handle_new_connection(SSL_CTX *ctx, int server_sock) {
     // Establish SSL for the new client connection
     SSL *ssl = SSL_new(ctx);
     SSL_set_fd(ssl, client_sock);
-    if (SSL_accept(ssl) <= 0) {
+
+    if (SSL_accept(ssl) <= 0) 
+    {
         ERR_print_errors_fp(stderr);
         close(client_sock);
         SSL_free(ssl);
@@ -242,6 +235,7 @@ int main(int argc, char **argv) {
         printf("closing\n");
         exit(1);
     }
+
     // Initialize OpenSSL and load the Chat Server certificate
     char crt[MAX];
     char key[MAX];

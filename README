@@ -13,14 +13,14 @@ KSUCIS525 CN - Chat Server - KSU CIS525
 
 3. Compile the source code using the command: make
 
-4. Start the directory servers in the background: ./directoryServer5 &; 
+4. Start the directory servers in the background: ./directoryServer5 &
 
 5. Start the chat server in the back ground with 2 comand line arguments. The first is the single  
    word topic name, and the second is the socket number you will want it to listen on above 40000 but less than 65535, you will set it in the background ex: ./chatServer5 test 40985 &
 
 6. Start the client on the same or another host in the foreground: ./chatClient5
 
-7. To connect the client to a server you must imput a port and ip from the list, then will connect 
+7. To connect the client to a server you must input a port and ip from the list, then will connect 
    you to that topic server.
 
 8. All spaces must be replaced usg an '_', 

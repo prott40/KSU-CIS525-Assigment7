@@ -7,7 +7,7 @@
 #include <stdbool.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
-#include "inet.h"//
+#include "inet.h"
 #include "common.h"
 #define IP_LEN 16
 
@@ -27,6 +27,7 @@ SSL_CTX *create_client_context() {
         exit(1);
     }
 
+
     if (SSL_CTX_use_PrivateKey_file(ctx, "client.key", SSL_FILETYPE_PEM) <= 0) {
         ERR_print_errors_fp(stderr);
         exit(1);
@@ -37,6 +38,7 @@ SSL_CTX *create_client_context() {
         fprintf(stderr, "Private key does not match the certificate public key\n");
         exit(1);
     }
+
 
     // Optionally load a CA to verify the server's certificate
     SSL_CTX_load_verify_locations(ctx, "ca.crt", NULL);
@@ -58,6 +60,7 @@ int main()
 		char list[500]= {'\0'};
 		char msg[500] = "Input selection from list";
 		bool linked = false;
+
 		/* Set up the address of the server to be contacted. */
 		// read possible comamnd line arguments for conection
 		memset((char *) &dir_addr, 0, sizeof(dir_addr));
@@ -76,12 +79,14 @@ int main()
 			perror("client: can't connect to server");
 			exit(1);
 		}
+
 		read(sockfd,s_in,MAX);
 		if(s_in[0] == '3'){
 			memset(s_out,0,sizeof(s_out));
 			snprintf(s_out,MAX,"%s","l");
 			write(sockfd,s_out,MAX);
 		}
+
 		char form[MAX] = "topic:ip:port";
 		printf("printed in the following format(%s)\n",form);
 		while(strncmp(list,msg,500) != 0)
@@ -91,6 +96,7 @@ int main()
 			printf("%s\n",list);
 			
 		}
+
 		printf("Enter server to connect to in the format: port ip (ex 1423 124.252.33.2)\n");
 		while (!linked) 
 		{

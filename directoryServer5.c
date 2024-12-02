@@ -9,7 +9,6 @@
 #include "inet.h"
 #include "common.h"
 
-
 // Structure to represent a registered chat server
 struct chat_server {
     char name[MAX]; // Chat room name (e.g., "KSU Football")
@@ -113,7 +112,7 @@ int main() {
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(PORT);
+    addr.sin_port = htons(SERV_TCP_PORT);
     addr.sin_addr.s_addr = INADDR_ANY;
     if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         perror("Unable to bind socket");
@@ -126,7 +125,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    printf("Directory Server listening on port %d...\n", PORT);
+    printf("Directory Server listening on port %d...\n", SERV_TCP_PORT);
 
     while (1) {
         // Accept a new connection
@@ -139,7 +138,7 @@ int main() {
         }
 
         // Establish SSL for the new connection
-        SSL *ssl = SSL_new(ctx);
+        SSL *ssl = SSL_new(ctx);//
         SSL_set_fd(ssl, client_sock);
         if (SSL_accept(ssl) <= 0) {
             ERR_print_errors_fp(stderr);

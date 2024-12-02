@@ -5,7 +5,9 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdbool.h>
-#include "inet.h"
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include "inet.h"//
 #include "common.h"
 #define IP_LEN 16
 

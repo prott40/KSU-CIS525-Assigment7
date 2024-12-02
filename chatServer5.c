@@ -7,7 +7,7 @@
 #include <openssl/err.h>
 #include <sys/queue.h>
 #include <fcntl.h>
-#include "inet.h"
+#include "inet.h"//
 #include "common.h"
 
 
@@ -55,7 +55,7 @@ void register_with_directory_server(const char *name) {
     int sock;
     struct sockaddr_in dir_addr;
     int topic_accept = 0;
-    char validation = "3";
+    char validation[MAX] = "3";
     // Create a socket to connect to the Directory Server
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
@@ -88,7 +88,7 @@ void register_with_directory_server(const char *name) {
 				if (FD_ISSET(sock, &readfds)) {
 					if ((read(sock, validation, MAX)) <= 0) {
 						printf("server has shut down\n");
-						close(dirsockfd);
+						close(sock);
 						exit(0);
 					} else {
 						switch(validation[0])
@@ -180,7 +180,7 @@ void handle_client_communication(SSL_CTX *ctx, struct client *client) {
     // Read data from the client
     while ((bytes = SSL_read(ssl, buffer, MAX)) > 0) {
        char outmes[MAX];
-        snprintf(outmes, MAX"%s: %s", client->name, buffer);
+        snprintf(outmes, MAX,"%s: %s", client->name, buffer);
 
         // Broadcast the message to other clients
         broadcast_message(outmes);
@@ -196,6 +196,7 @@ void handle_client_communication(SSL_CTX *ctx, struct client *client) {
 
 int main(int argc, char **argv) {
     LIST_INIT(&client_list); // Initialize the client list
+    char s_out[MAX];
     if(argc >0){
 		printf("starting  %s\n", argv[0]);
 	}
@@ -243,7 +244,7 @@ int main(int argc, char **argv) {
     }
 
     // Register the chat server with the Directory Server
-    register_with_directory_server(argv[1], argv[2]);
+    register_with_directory_server(argv[1]);
 
     // Start listening for incoming connections
     if (listen(server_sock, MAX_CLIENTS) < 0) {
@@ -264,4 +265,5 @@ int main(int argc, char **argv) {
     EVP_cleanup();
 
     return 0;
+}
 }

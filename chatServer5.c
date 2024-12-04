@@ -7,24 +7,29 @@
 #include <openssl/err.h>
 #include <sys/queue.h>
 #include <fcntl.h>
-#include "inet.h"//
+#include <errno.h>
+#include "inet.h"
 #include "common.h"
 
-
 unsigned short int port;
-fd_set readfds, serfds;
-
+int sockfd, nfds, activity;
+struct sockaddr_in serv_addr;
+fd_set readfds, writefds;
+int usernum, gotgot;
+char getter[MAX];
 // Structure to represent a connected client
 struct client {
     int sock; // Socket descriptor
+    SSL *ssl; // SSL connection
     char name[MAX]; // Client name
+    char to[MAX], fr[MAX]; // message to the node and from the node
+    char *tooptr, *friptr; // pointers for counting in message
     LIST_ENTRY(client) clients; // List link
 };
 
 // Head of the list for storing connected clients
 LIST_HEAD(client_list, client) client_list;
 
-// Function to initialize OpenSSL
 SSL_CTX *init_openssl(const char *cert_file, const char *key_file) {
     if (!cert_file || !*cert_file) {
         fprintf(stderr, "Error: Certificate file path is NULL or empty\n");
@@ -72,8 +77,6 @@ SSL_CTX *init_openssl(const char *cert_file, const char *key_file) {
     return ctx;
 }
 
-//Bug might be here possibly
-// Function to register the chat server with the Directory Server
 void register_with_directory_server(const char *name) {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
@@ -91,6 +94,7 @@ void register_with_directory_server(const char *name) {
         exit(EXIT_FAILURE);
     }
 
+    //Error here 
     if (connect(sock, (struct sockaddr *)&dir_addr, sizeof(dir_addr)) < 0) {
         perror("Unable to connect to Directory Server");
         close(sock);
@@ -116,11 +120,12 @@ void register_with_directory_server(const char *name) {
     // Send server details
     char buffer[MAX];
     snprintf(buffer, MAX, "%s:%d", name, port);
-    SSL_write(ssl, buffer, strlen(buffer));
+    SSL_write(ssl, buffer, MAX);
+    
 
     // Read response
     char response[MAX];
-    int bytes = SSL_read(ssl, response, sizeof(response) - 1);
+    int bytes = SSL_read(ssl, response, MAX);
     if (bytes > 0) {
         response[bytes] = '\0';
         printf("Directory Server response: %s\n", response);
@@ -132,87 +137,221 @@ void register_with_directory_server(const char *name) {
     close(sock);
 }
 
-// Function to handle incoming client connections
-// BUG POSSIBLY OCCURING HERE BECAUSE SERVER IS NOT ACCEPTING VIA SSL TO DIRECTORY
-void handle_new_connection(SSL_CTX *ctx, int server_sock) {
-    struct sockaddr_in client_addr;
-    socklen_t client_len = sizeof(client_addr);
+// sets the socket to non blocking
+void set_nonblocking(int sock_fd) {
+    int val = fcntl(sock_fd, F_GETFL, 0);
+    fcntl(sock_fd, F_SETFL, val | O_NONBLOCK);
+}
 
-    int client_sock = accept(server_sock, (struct sockaddr *)&client_addr, &client_len);
-    if (client_sock < 0) {
-        perror("Unable to accept new client connection");
-        return;
-    }
+// initializes the buffers for that node
+void initialize_client_buffers(struct client* cl) {
+    cl->tooptr = cl->to;
+    cl->friptr = cl->fr;
+    snprintf(cl->name, MAX, "*");
+}
 
-    // Establish SSL for the new client connection
-    SSL *ssl = SSL_new(ctx);
-    SSL_set_fd(ssl, client_sock);
-
-    if (SSL_accept(ssl) <= 0) 
+int check_name(struct client *c, struct client_list *head)
+{
+    struct client * tt;
+    LIST_FOREACH(tt, &client_list, clients)
     {
-        ERR_print_errors_fp(stderr);
-        close(client_sock);
-        SSL_free(ssl);
+        if(tt != c){
+            if(strncmp(tt->name, c->name, MAX) == 0){
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+void handle_new_connection(SSL_CTX *ctx, int sock_fd, struct client_list *head, int *Nfds) {
+    // Create base messages
+    char getuser[MAX] = "Enter your nickname:";
+    char firstuser[MAX] = "You are the first user:\nEnter your nickname:";
+    struct sockaddr_in cli_addr;
+    socklen_t clilen = sizeof(cli_addr);
+    
+    // Accept new connection
+    int newsockfd = accept(sock_fd, (struct sockaddr *)&cli_addr, &clilen);
+    if (newsockfd < 0) {
+        perror("Accept error");
         return;
     }
 
-    // Add the new client to the client list
-    struct client *new_client = malloc(sizeof(struct client));
-    new_client->sock = client_sock;
-    snprintf(new_client->name, sizeof(new_client->name), "Client%d", client_sock); // Assign a temporary name
-    LIST_INSERT_HEAD(&client_list, new_client, clients);
+    // Set to non-blocking
+    set_nonblocking(newsockfd);
 
-    printf("New client connected: %s\n", new_client->name);
-
-    // Notify the client of successful connection
-    SSL_write(ssl, "Welcome to the chat server!\n", strlen("Welcome to the chat server!\n"));
-
-    // Clean up SSL context
-    SSL_free(ssl);
-}
-
-// Function to broadcast a message to all connected clients
-void broadcast_message(const char *message) {
-    struct client *client;
-    LIST_FOREACH(client, &client_list, clients) {
-        write(client->sock, message, strlen(message));
-    }
-}
-
-// Function to handle client communication
-void handle_client_communication(SSL_CTX *ctx, struct client *client) {
-    char buffer[MAX];
-    int bytes;
-
-    // Establish SSL for the client
+    // Create SSL for the new connection
     SSL *ssl = SSL_new(ctx);
-    SSL_set_fd(ssl, client->sock);
-    if (SSL_accept(ssl) <= 0) {
+    SSL_set_fd(ssl, newsockfd);
+
+    // Perform SSL handshake
+    int ssl_accept_result = SSL_accept(ssl);
+    if (ssl_accept_result <= 0) {
+        int ssl_err = SSL_get_error(ssl, ssl_accept_result);
         ERR_print_errors_fp(stderr);
-        close(client->sock);
+        close(newsockfd);
         SSL_free(ssl);
         return;
     }
 
-    // Read data from the client
-    while ((bytes = SSL_read(ssl, buffer, MAX)) > 0) {
-       char outmes[MAX];
-        snprintf(outmes, MAX,"%s: %s", client->name, buffer);
+    // Create new client struct
+    struct client *new_client = (struct client *)malloc(sizeof(struct client));
+    new_client->sock = newsockfd;
+    new_client->ssl = ssl;
+    initialize_client_buffers(new_client);
+    LIST_INSERT_HEAD(head, new_client, clients);
+    usernum++;
 
-        // Broadcast the message to other clients
-        broadcast_message(outmes);
+    if (newsockfd > *Nfds) {
+        *Nfds = newsockfd; // set new max file descriptor
     }
 
-    // Clean up and remove the client
-    printf("Client disconnected: %s\n", client->name);
-    LIST_REMOVE(client, clients);
-    close(client->sock);
-    SSL_free(ssl);
-    free(client);
+    // Check if first user
+    if(usernum == 1){
+        snprintf(new_client->to, MAX, "%s", firstuser);
+        new_client->tooptr = new_client->to;
+    }
+    else{
+        snprintf(new_client->to, MAX, "%s", getuser);
+        new_client->tooptr = new_client->to;
+    }
 }
+
+int handle_client_message(struct client *cl, struct client_list *head)  {
+    int acflg = 0;
+    int nread;
+
+    // Use SSL_read instead of read
+    nread = SSL_read(cl->ssl, cl->friptr, &cl->fr[MAX] - cl->friptr);
+
+    // Check for SSL read error
+    if (nread <= 0) {
+        int ssl_err = SSL_get_error(cl->ssl, nread);
+        switch (ssl_err) {
+            case SSL_ERROR_ZERO_RETURN:
+                printf("Client %s disconnected\n", cl->name);
+                break;
+            case SSL_ERROR_SYSCALL:
+                perror("SSL read error (syscall)");
+                break;
+            case SSL_ERROR_SSL:
+                ERR_print_errors_fp(stderr);
+                break;
+            default:
+                fprintf(stderr, "Unknown SSL read error: %d\n", ssl_err);
+                break;
+        }
+        
+        // Common cleanup for all error cases
+        snprintf(getter, MAX, "%s", cl->name);
+        SSL_shutdown(cl->ssl);
+        SSL_free(cl->ssl);
+        close(cl->sock);
+        LIST_REMOVE(cl, clients);
+        free(cl);
+        usernum--;
+        gotgot = 1;
+        
+        return 1;
+    }
+
+    // Increment from pointer
+    cl->friptr += nread;
+    if (cl->friptr < &cl->fr[MAX]) {
+        return 0; // waiting for buffer to be full
+    }
+    cl->friptr = cl->fr;
+
+    // If new connection
+    if (cl->name[0] == '*') {
+        // Copy over nickname
+        snprintf(cl->name, MAX, "%s", cl->fr);
+        // Check that nickname
+        if (0 == check_name(cl, &client_list)) {
+            snprintf(cl->to, MAX, "Nickname accepted!\n");
+            cl->tooptr = cl->to;
+            acflg = 1;
+        } else {
+            // When name already exists
+            snprintf(getter, MAX, "%s", cl->name);
+            SSL_shutdown(cl->ssl);
+            SSL_free(cl->ssl);
+            close(cl->sock);
+            LIST_REMOVE(cl, clients);
+            free(cl);
+            usernum--;
+            gotgot = 1;
+            
+            return 1;
+        }
+    }
+
+    // Broadcast message to all clients
+    struct client *other;
+    LIST_FOREACH(other, head, clients) {
+        if (gotgot == 0) {
+            if (other != cl) {
+                if (acflg == 0) {
+                    snprintf(other->to, MAX, "%s:%s", cl->name, cl->fr);
+                    other->tooptr = other->to;
+                } else if (acflg == 1) {
+                    snprintf(other->to, MAX, "%s:has joined the chat", cl->name);
+                    other->tooptr = other->to;
+                }
+            }
+        } else {
+            snprintf(other->to, MAX, "%s:has disconnected", getter);
+            other->tooptr = other->to;
+            gotgot = 0;
+            snprintf(cl->to, MAX, "%s:has disconnected", getter);
+            cl->tooptr = cl->to;
+            gotgot = 0;
+        }
+    }
+
+    return 0;
+}
+
+// SSL-secured write function
+void write_to_client(struct client *cl) {
+    // Attempt to write remaining data in the buffer
+    int nwritten = SSL_write(cl->ssl, cl->tooptr, &cl->to[MAX] - cl->tooptr);
+
+    // Check for SSL write error
+    if (nwritten <= 0) {
+        int ssl_err = SSL_get_error(cl->ssl, nwritten);
+        switch (ssl_err) {
+            case SSL_ERROR_ZERO_RETURN:
+                printf("SSL connection closed\n");
+                break;
+            case SSL_ERROR_SYSCALL:
+                perror("SSL write error (syscall)");
+                break;
+            case SSL_ERROR_SSL:
+                ERR_print_errors_fp(stderr);
+                break;
+            default:
+                fprintf(stderr, "Unknown SSL write error: %d\n", ssl_err);
+                break;
+        }
+        
+        // Cleanup
+        SSL_shutdown(cl->ssl);
+        SSL_free(cl->ssl);
+        close(cl->sock);
+        return;
+    }
+
+    // Move the write pointer forward by the number of bytes written
+    cl->tooptr += nwritten;
+}
+
+// Rest of the code remains the same as in your original implementation, with these key changes:
 
 int main(int argc, char **argv) {
-    LIST_INIT(&client_list); // Initialize the client list
+    struct client_list new_client_list; // Declare the list correctly
+    LIST_INIT(&new_client_list); // Initialize the client list
     char s_out[MAX];
     if(argc >0){
 		printf("starting  %s\n", argv[0]);
@@ -254,7 +393,7 @@ int main(int argc, char **argv) {
     // Create a TCP socket for the Chat Server
     int server_sock = socket(AF_INET, SOCK_STREAM, 0);
     if (server_sock < 0) {
-        perror("Unable to create Chat Server socket");
+        perror("Unable to create Chat Server socket\n");
         exit(EXIT_FAILURE);
     }
 
@@ -277,12 +416,43 @@ int main(int argc, char **argv) {
         perror("Unable to listen on Chat Server socket");
         exit(EXIT_FAILURE);
     }
-
+    set_nonblocking(server_sock);
     printf("Chat Server listening on port %d...\n", port);
 
     while (1) {
-        // Accept and handle new client connections
-        handle_new_connection(ctx, server_sock);
+        FD_ZERO(&readfds);
+        FD_ZERO(&writefds);
+        FD_SET(server_sock, &readfds);
+        nfds = server_sock;
+        struct client *cl;
+        LIST_FOREACH(cl, &new_client_list, clients)  {
+            FD_SET(cl->sock, &readfds);
+            if (cl->tooptr <= &cl->to[MAX]) { 
+                FD_SET(cl->sock, &writefds);
+            }
+            if (cl->sock > nfds) {
+                nfds = cl->sock;
+            }
+        }
+        
+        activity = select(nfds + 1, &readfds, &writefds, NULL, NULL);
+        if (activity < 0 && errno != EINTR) {
+            perror("Select error");
+        }
+        
+        if (FD_ISSET(server_sock, &readfds)) {
+            handle_new_connection(ctx, server_sock, &new_client_list, &nfds);
+        }
+        
+        LIST_FOREACH(cl, &new_client_list, clients) {
+            if (FD_ISSET(cl->sock, &readfds)) {
+                handle_client_message(cl, &new_client_list);
+            }
+            
+            if (FD_ISSET(cl->sock, &writefds)) {
+                write_to_client(cl);
+            }
+        }
     }
 
     // Clean up

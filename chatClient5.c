@@ -237,7 +237,7 @@ int main() {
                     if(ssl_connect_result < 0){
                         printf("SSL Handshake failedy\n");
                     }
-                if (fgets(s_out, sizeof(s_out), stdin) != NULL) {
+                if (scanf(" %[^\n]",s_out) == 1) {
                     s_out[strcspn(s_out, "\n")] = '\0';
                     
                     int write_result = SSL_write(ssl, s_out, MAX);

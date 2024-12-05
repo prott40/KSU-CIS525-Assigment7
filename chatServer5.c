@@ -271,16 +271,16 @@ int handle_client_message(struct client *cl, struct listhead *head) {
     printf("Received message (length %d): '%s'\n", nread, message_buffer);
 
     // Explicitly check if this is the first message (nickname)
-    if (cl->name[0]== "*") {
+    if (cl->name[0] == '*') {
         // Trim whitespace and newline
         char *trimmed = message_buffer;
         while (*trimmed && (*trimmed == ' ' || *trimmed == '\n')) trimmed++;
-        char *end = trimmed + strnlen(trimmed,MAX) - 1;
+        char *end = trimmed + strlen(trimmed) - 1;
         while (end > trimmed && (*end == ' ' || *end == '\n')) *end-- = '\0';
 
         printf("Attempting to register nickname: '%s'\n", trimmed);
 
-        if (strnlen(trimmed,MAX) == 0) {
+        if (strnlen(trimmed, sizeof(trimmed)) == 0) {
             printf("Empty nickname, rejecting\n");
             
             SSL_shutdown(cl->ssl);
@@ -306,7 +306,10 @@ int handle_client_message(struct client *cl, struct listhead *head) {
                             snprintf(other->to, MAX, "%s:has joined the chat", cl->name);
                             other->tooptr = other->to;  
                             write_to_client(cl);                          
-                        } 
+                        } else  {
+                            //snprintf(other->to, MAX, "%s:%s", cl->name, cl->fr);
+                            //other->tooptr = other->to;
+                        }
                 }
                     
             
@@ -342,6 +345,8 @@ int handle_client_message(struct client *cl, struct listhead *head) {
 
     return 0;
 }
+
+
 
 int write_to_client(struct client *cl, struct listhead * head) {
     int total_written = 0;

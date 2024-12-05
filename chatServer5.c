@@ -28,7 +28,7 @@ struct client {
 };
 
 // Head of the list for storing connected clients
-LIST_HEAD(client_list, client) client_list;
+LIST_HEAD(listhead, client) client_list;
 
 SSL_CTX *init_openssl(const char *cert_file, const char *key_file) {
     if (!cert_file || !*cert_file) {
@@ -73,7 +73,7 @@ SSL_CTX *init_openssl(const char *cert_file, const char *key_file) {
         SSL_CTX_free(ctx);
         return NULL;
     }
-
+    SSL_set_mode(ctx, SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
     return ctx;
 }
 
@@ -150,10 +150,10 @@ void initialize_client_buffers(struct client* cl) {
     snprintf(cl->name, MAX, "*");
 }
 
-int check_name(struct client *c, struct client_list *head)
+int check_name(struct client *c, struct listhead *head)
 {
     struct client * tt;
-    LIST_FOREACH(tt, &client_list, clients)
+    LIST_FOREACH(tt, head, clients)
     {
         if(tt != c){
             if(strncmp(tt->name, c->name, MAX) == 0){
@@ -164,7 +164,7 @@ int check_name(struct client *c, struct client_list *head)
     return 0;
 }
 
-void handle_new_connection(SSL_CTX *ctx, int sock_fd, struct client_list *head, int *Nfds) {
+void handle_new_connection(SSL_CTX *ctx, int sock_fd, struct listhead *head, int *Nfds) {
     // Create base messages
     char getuser[MAX] = "Enter your nickname:";
     char firstuser[MAX] = "You are the first user:\nEnter your nickname:";
@@ -199,6 +199,7 @@ void handle_new_connection(SSL_CTX *ctx, int sock_fd, struct client_list *head, 
     set_nonblocking(newsockfd);
     struct client *new_client = (struct client *)malloc(sizeof(struct client));
     new_client->sock = newsockfd;
+    SSL_set_mode(ssl, SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
     new_client->ssl = ssl;
     initialize_client_buffers(new_client);
     LIST_INSERT_HEAD(head, new_client, clients);
@@ -218,7 +219,7 @@ void handle_new_connection(SSL_CTX *ctx, int sock_fd, struct client_list *head, 
         new_client->tooptr = new_client->to;
     }
 }
-
+/*
 int handle_client_message(struct client *cl, struct client_list *head)  {
     int acflg = 0;
     int nread;
@@ -347,11 +348,157 @@ void write_to_client(struct client *cl) {
     // Move the write pointer forward by the number of bytes written
     cl->tooptr += nwritten;
 }
-
+*/
 // Rest of the code remains the same as in your original implementation, with these key changes:
+int handle_client_message(struct client *cl, struct listhead *head) {
+    int nread;
+    char message_buffer[MAX + 1] = {0}; 
+
+    // Set SSL socket to non-blocking mode
+    SSL_set_mode(cl->ssl, SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
+
+    // Read with a null-terminated buffer
+    nread = SSL_read(cl->ssl, message_buffer, MAX);
+
+    // Handle SSL read errors more gracefully
+    if (nread <= 0) {
+        int ssl_err = SSL_get_error(cl->ssl, nread);
+        
+        // These errors typically mean "try again later" in non-blocking mode
+        if (ssl_err == SSL_ERROR_WANT_READ || ssl_err == SSL_ERROR_WANT_WRITE) {
+            return 0;  // Not an error, just not ready
+        }
+
+        // More serious errors
+        if (ssl_err == SSL_ERROR_ZERO_RETURN) {
+            printf("Client connection closed\n");
+        } else {
+            char errbuf[256];
+            ERR_error_string_n(ssl_err, errbuf, sizeof(errbuf));
+            fprintf(stderr, "SSL read error: %s\n", errbuf);
+        }
+
+        // Cleanup for serious errors
+        SSL_shutdown(cl->ssl);
+        SSL_free(cl->ssl);
+        close(cl->sock);
+        LIST_REMOVE(cl, clients);
+        free(cl);
+        usernum--;
+        
+        return 1;
+    }
+    // Null-terminate the received message
+    message_buffer[nread] = '\0';
+
+    // Debug print of received message
+    printf("Received message (length %d): '%s'\n", nread, message_buffer);
+
+    // Explicitly check if this is the first message (nickname)
+    if (strcmp(cl->name, "*") == 0) {
+        // Trim whitespace and newline
+        char *trimmed = message_buffer;
+        while (*trimmed && (*trimmed == ' ' || *trimmed == '\n')) trimmed++;
+        char *end = trimmed + strlen(trimmed) - 1;
+        while (end > trimmed && (*end == ' ' || *end == '\n')) *end-- = '\0';
+
+        printf("Attempting to register nickname: '%s'\n", trimmed);
+
+        if (strlen(trimmed) == 0) {
+            printf("Empty nickname, rejecting\n");
+            SSL_shutdown(cl->ssl);
+            SSL_free(cl->ssl);
+            close(cl->sock);
+            LIST_REMOVE(cl, clients);
+            free(cl);
+            usernum--;
+            return 1;
+        }
+
+        if (0 == check_name(cl, head)) {
+            // Successfully registered nickname
+            snprintf(cl->name, MAX, "%s", trimmed);
+            printf("Nickname registered: %s\n", cl->name);
+            
+
+            // Send nickname acceptance message
+            snprintf(cl->to, MAX, "Nickname %s accepted!", cl->name);
+            write_to_client(cl);
+        } else {
+            // Name already exists, disconnect client
+            printf("Nickname %s already exists\n", trimmed);
+            SSL_shutdown(cl->ssl);
+            SSL_free(cl->ssl);
+            close(cl->sock);
+            LIST_REMOVE(cl, clients);
+            free(cl);
+            usernum--;
+            return 1;
+        }
+    } else {
+        // Regular message handling
+        
+         printf("Received message (length %d): '%s'\n", nread, message_buffer);
+            printf("Current client state - Name: %s, Socket: %d\n", cl->name, cl->sock);
+        // Broadcast message to all other clients
+        struct client *other;
+        LIST_FOREACH(other, head, clients) {
+            if (other != cl) {
+                snprintf(other->to, MAX, "%s: %s", cl->name, message_buffer);
+                printf("Broadcasting to client: %s\n", other->name);
+                write_to_client(other);
+            }
+        }
+    }
+
+    return 0;
+}
+
+void write_to_client(struct client *cl) {
+    int total_written = 0;
+    int remaining = strlen(cl->to);
+    
+    if (remaining == 0) {
+        // No data to write
+        return;
+    }
+
+    // Set SSL socket to non-blocking mode
+    SSL_set_mode(cl->ssl, SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
+
+    printf("Attempting to write to client: %s\n", cl->to);
+
+    while (total_written < remaining) {
+        int nwritten = SSL_write(cl->ssl, cl->to + total_written, remaining - total_written);
+        
+        if (nwritten <= 0) {
+            int ssl_err = SSL_get_error(cl->ssl, nwritten);
+            
+            // Handle SSL write errors
+            if (ssl_err == SSL_ERROR_WANT_WRITE || ssl_err == SSL_ERROR_WANT_READ) {
+                // Not ready to write, try again later
+                printf("Write blocked, will retry\n");
+                break;
+            }
+
+            // Serious error
+            fprintf(stderr, "SSL write error: %d\n", ssl_err);
+            SSL_shutdown(cl->ssl);
+            SSL_free(cl->ssl);
+            close(cl->sock);
+            return;
+        }
+        
+        total_written += nwritten;
+        printf("Wrote %d bytes\n", total_written);
+    }
+    
+    // Clear the buffer after writing
+    memset(cl->to, 0, MAX);
+}
 
 int main(int argc, char **argv) {
-    struct client_list new_client_list; // Declare the list correctly
+    struct listhead new_client_list; // Declare the list correctly
     LIST_INIT(&new_client_list); // Initialize the client list
     char s_out[MAX];
     if(argc >0){
@@ -429,10 +576,13 @@ int main(int argc, char **argv) {
         FD_ZERO(&writefds);
         FD_SET(sockfd, &readfds);
         nfds = sockfd;
+
+        // Add client sockets to read and write sets
         struct client *cl;
         LIST_FOREACH(cl, &new_client_list, clients)  {
             FD_SET(cl->sock, &readfds);
-            if (cl->tooptr <= &cl->to[MAX]) { 
+            // Only set write if there's data to send
+            if (strlen(cl->to) > 0) { 
                 FD_SET(cl->sock, &writefds);
             }
             if (cl->sock > nfds) {
@@ -450,13 +600,17 @@ int main(int argc, char **argv) {
         }
         
         LIST_FOREACH(cl, &new_client_list, clients) {
+            
             if (FD_ISSET(cl->sock, &readfds)) {
+                SSL_accept(cl->ssl);
                 handle_client_message(cl, &new_client_list);
             }
             
             if (FD_ISSET(cl->sock, &writefds)) {
+                SSL_connect(cl->ssl);
                 write_to_client(cl);
             }
+           
         }
     }
 

@@ -108,10 +108,10 @@ int connect_to_directory_server(SSL_CTX *ctx) {
     return sockfd;
 }
 
-int connect_to_chat_server(SSL_CTX *ctx, const char *chataddy, unsigned short chatport) {
+int connect_to_chat_server(SSL *ssl, const char *chataddy, unsigned short chatport) {
     int sersockfd;
     struct sockaddr_in serv_addr;
-    SSL *ssl = NULL;
+    
 
     // Create socket
     if ((sersockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -133,7 +133,7 @@ int connect_to_chat_server(SSL_CTX *ctx, const char *chataddy, unsigned short ch
     }
 
     // Establish SSL connection
-    ssl = SSL_new(ctx);
+    
     if (!ssl) {
         fprintf(stderr, "SSL_new failed.\n");
         close(sersockfd);
@@ -205,7 +205,8 @@ int main() {
     }
 
     // Connect to selected chat server
-    int sersockfd = connect_to_chat_server(ctx, chataddy, chatport);
+    SSL *ssl = SSL_new(ctx);
+    int sersockfd = connect_to_chat_server(ssl, chataddy, chatport);
     if (sersockfd < 0) {
         fprintf(stderr, "Failed to connect to chat server\n");
         SSL_CTX_free(ctx);
@@ -216,10 +217,12 @@ int main() {
     fd_set readset;
     char s_out[MAX] = {'\0'};
     char s_in[MAX] = {'\0'};
-    SSL *ssl = SSL_new(ctx);
-    SSL_set_fd(ssl, sersockfd);
+    
+    
+    fcntl(sersockfd, F_SETFL, O_NONBLOCK);
+    
 
-    for (;;) {
+   for (;;) {
         FD_ZERO(&readset);
         FD_SET(STDIN_FILENO, &readset);
         FD_SET(sersockfd, &readset);
@@ -230,18 +233,46 @@ int main() {
         if (select(sersockfd + 1, &readset, NULL, NULL, NULL) > 0) {
             // Check user input
             if (FD_ISSET(STDIN_FILENO, &readset)) {
+                 int ssl_connect_result = SSL_connect(ssl);
+                    if(ssl_connect_result < 0){
+                        printf("SSL Handshake failedy\n");
+                    }
                 if (fgets(s_out, sizeof(s_out), stdin) != NULL) {
-                    // Remove newline
                     s_out[strcspn(s_out, "\n")] = '\0';
-                    SSL_write(ssl, s_out, strlen(s_out));
-                } else {
-                    printf("Error reading user input\n");
-                    break;
+                    
+                    int write_result = SSL_write(ssl, s_out, strlen(s_out));
+
+                if (write_result <= 0) {
+                    int ssl_err = SSL_get_error(ssl, write_result);
+                    
+                    switch (ssl_err) {
+                        case SSL_ERROR_WANT_WRITE:
+                            printf("SSL connection not ready to write. Retrying...\n");
+                            // You might want to implement a retry mechanism or wait
+                            break;
+                        case SSL_ERROR_WANT_READ:
+                            printf("SSL needs to read before writing\n");
+                            break;
+                        case SSL_ERROR_ZERO_RETURN:
+                            printf("SSL connection closed\n");
+                            break;
+                        case SSL_ERROR_SYSCALL:
+                            perror("SSL write error (syscall)");
+                            break;
+                        default:
+                            fprintf(stderr, "Unexpected SSL write error: %d\n", ssl_err);
+                            break;
+                    }
+                }
                 }
             }
 
             // Check server messages
             if (FD_ISSET(sersockfd, &readset)) {
+                int ssl_connect_result = SSL_accept(ssl);
+                    if(ssl_connect_result < 0){
+                        printf("SSL Handshake failedy\n");
+                    }
                 int bytes = SSL_read(ssl, s_in, sizeof(s_in) - 1);
                 if (bytes <= 0) {
                     printf("Server has shut down\n");

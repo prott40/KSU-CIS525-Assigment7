@@ -58,10 +58,8 @@ SSL_CTX *create_client_context()
 int connect_to_directory_server(SSL_CTX *ctx) {
     int sockfd;
     struct sockaddr_in dir_addr;
-    char s_in[MAX] = {'\0'};
-    char s_out[MAX] = {'\0'};
+    //char s_in[MAX] = {'\0'};
     char list[500] = {'\0'};
-    char msg[500] = "Input selection from list";
 
     // Set up directory server address
     memset((char *) &dir_addr, 0, sizeof(dir_addr));
@@ -97,11 +95,13 @@ int connect_to_directory_server(SSL_CTX *ctx) {
     SSL_write(ssl, "&", MAX);
 
     // Read server list
-    memset(list, 0, sizeof(list));
     int bytes = SSL_read(ssl, list, sizeof(list) - 1);
     if (bytes > 0) {
-        list[bytes] = '\0';
+        list[bytes] = '\0'; // Null-terminate the received string
         printf("Available Chat Servers:\n%s\n", list);
+    } else {
+        fprintf(stderr, "Failed to retrieve server list.\n");
+        ERR_print_errors_fp(stderr);
     }
 
     // Keep the SSL connection open for further interactions if needed
@@ -120,13 +120,13 @@ int connect_to_chat_server(SSL_CTX *ctx, const char *chataddy, unsigned short ch
     }
 
     // Set up chat server address
-    memset((char *) &serv_addr, 0, sizeof(serv_addr));
+    memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = inet_addr(chataddy);
     serv_addr.sin_port = htons(chatport);
 
     // Connect to chat server
-    if (connect(sersockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
+    if (connect(sersockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
         perror("client: can't connect to chat server");
         close(sersockfd);
         return -1;
@@ -134,9 +134,15 @@ int connect_to_chat_server(SSL_CTX *ctx, const char *chataddy, unsigned short ch
 
     // Establish SSL connection
     ssl = SSL_new(ctx);
-    SSL_set_fd(ssl, sersockfd);
+    if (!ssl) {
+        fprintf(stderr, "SSL_new failed.\n");
+        close(sersockfd);
+        return -1;
+    }
 
+    SSL_set_fd(ssl, sersockfd);
     if (SSL_connect(ssl) <= 0) {
+        fprintf(stderr, "SSL_connect failed:\n");
         ERR_print_errors_fp(stderr);
         SSL_free(ssl);
         close(sersockfd);
@@ -149,6 +155,9 @@ int connect_to_chat_server(SSL_CTX *ctx, const char *chataddy, unsigned short ch
     if (welcome_len > 0) {
         welcome[welcome_len] = '\0';
         printf("%s\n", welcome);
+    } else {
+        fprintf(stderr, "SSL_read failed:\n");
+        ERR_print_errors_fp(stderr);
     }
 
     return sersockfd;

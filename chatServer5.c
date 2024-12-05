@@ -13,7 +13,7 @@
 
 unsigned short int port;
 int sockfd, nfds, activity;
-struct sockaddr_in serv_addr;
+struct sockaddr_in serv_addr, cli_addr;
 fd_set readfds, writefds;
 int usernum, gotgot;
 char getter[MAX];
@@ -168,8 +168,8 @@ void handle_new_connection(SSL_CTX *ctx, int sock_fd, struct client_list *head, 
     // Create base messages
     char getuser[MAX] = "Enter your nickname:";
     char firstuser[MAX] = "You are the first user:\nEnter your nickname:";
-    struct sockaddr_in cli_addr;
-    socklen_t clilen = sizeof(cli_addr);
+    
+    unsigned int clilen = sizeof(cli_addr);
     
     // Accept new connection
     int newsockfd = accept(sock_fd, (struct sockaddr *)&cli_addr, &clilen);
@@ -179,7 +179,7 @@ void handle_new_connection(SSL_CTX *ctx, int sock_fd, struct client_list *head, 
     }
 
     // Set to non-blocking
-    set_nonblocking(newsockfd);
+    
 
     // Create SSL for the new connection
     SSL *ssl = SSL_new(ctx);
@@ -196,6 +196,7 @@ void handle_new_connection(SSL_CTX *ctx, int sock_fd, struct client_list *head, 
     }
 
     // Create new client struct
+    set_nonblocking(newsockfd);
     struct client *new_client = (struct client *)malloc(sizeof(struct client));
     new_client->sock = newsockfd;
     new_client->ssl = ssl;
@@ -226,7 +227,7 @@ int handle_client_message(struct client *cl, struct client_list *head)  {
     nread = SSL_read(cl->ssl, cl->friptr, &cl->fr[MAX] - cl->friptr);
 
     // Check for SSL read error
-    if (nread <= 0) {
+    if (nread < 0) {
         int ssl_err = SSL_get_error(cl->ssl, nread);
         switch (ssl_err) {
             case SSL_ERROR_ZERO_RETURN:
@@ -255,7 +256,7 @@ int handle_client_message(struct client *cl, struct client_list *head)  {
         
         return 1;
     }
-
+    printf("%s",cl->name);
     // Increment from pointer
     cl->friptr += nread;
     if (cl->friptr < &cl->fr[MAX]) {
@@ -319,7 +320,7 @@ void write_to_client(struct client *cl) {
     int nwritten = SSL_write(cl->ssl, cl->tooptr, &cl->to[MAX] - cl->tooptr);
 
     // Check for SSL write error
-    if (nwritten <= 0) {
+    if (nwritten < 0) {
         int ssl_err = SSL_get_error(cl->ssl, nwritten);
         switch (ssl_err) {
             case SSL_ERROR_ZERO_RETURN:
@@ -391,8 +392,8 @@ int main(int argc, char **argv) {
     }
     
     // Create a TCP socket for the Chat Server
-    int server_sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_sock < 0) {
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
         perror("Unable to create Chat Server socket\n");
         exit(EXIT_FAILURE);
     }
@@ -402,28 +403,32 @@ int main(int argc, char **argv) {
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = INADDR_ANY;
-    if (bind(server_sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    if (bind(sockfd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         perror("Unable to bind Chat Server socket");
         exit(EXIT_FAILURE);
     }
-
+    int true = 1;
+	if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (void *)&true, sizeof(true)) < 0) {
+		perror("server: can't set stream socket address reuse option");
+		exit(1);
+	}
     // Register the chat server with the Directory Server
     register_with_directory_server(argv[1]);
 
     // Start listening for incoming connections
-    if (listen(server_sock, MAX_CLIENTS) < 0) {
+    if (listen(sockfd, MAX_CLIENTS) < 0) {
         perror("Unable to listen on Chat Server socket");
         exit(EXIT_FAILURE);
     }
-    set_nonblocking(server_sock);
+    set_nonblocking(sockfd);
     printf("Chat Server listening on port %d...\n", port);
 
     while (1) {
         FD_ZERO(&readfds);
         FD_ZERO(&writefds);
-        FD_SET(server_sock, &readfds);
-        nfds = server_sock;
+        FD_SET(sockfd, &readfds);
+        nfds = sockfd;
         struct client *cl;
         LIST_FOREACH(cl, &new_client_list, clients)  {
             FD_SET(cl->sock, &readfds);
@@ -440,8 +445,8 @@ int main(int argc, char **argv) {
             perror("Select error");
         }
         
-        if (FD_ISSET(server_sock, &readfds)) {
-            handle_new_connection(ctx, server_sock, &new_client_list, &nfds);
+        if (FD_ISSET(sockfd, &readfds)) {
+            handle_new_connection(ctx, sockfd, &new_client_list, &nfds);
         }
         
         LIST_FOREACH(cl, &new_client_list, clients) {
@@ -456,7 +461,7 @@ int main(int argc, char **argv) {
     }
 
     // Clean up
-    close(server_sock);
+    close(sockfd);
     SSL_CTX_free(ctx);
     EVP_cleanup();
 

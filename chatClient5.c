@@ -149,6 +149,13 @@ int connect_to_chat_server(SSL_CTX *ctx, const char *chataddy, unsigned short ch
     if (welcome_len > 0) {
         welcome[welcome_len] = '\0';
         printf("%s\n", welcome);
+        char username[MAX];
+	    printf("Enter a username: ");
+	    scanf("%s", username);
+        SSL_write(ssl, "%s", sizeof(username) + 1);
+    }
+    else{
+        printf("erm, what?");//for debugging
     }
 
     return sersockfd;

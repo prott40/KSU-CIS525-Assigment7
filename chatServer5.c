@@ -219,136 +219,7 @@ void handle_new_connection(SSL_CTX *ctx, int sock_fd, struct listhead *head, int
         new_client->tooptr = new_client->to;
     }
 }
-/*
-int handle_client_message(struct client *cl, struct client_list *head)  {
-    int acflg = 0;
-    int nread;
 
-    // Use SSL_read instead of read
-    nread = SSL_read(cl->ssl, cl->friptr, &cl->fr[MAX] - cl->friptr);
-
-    // Check for SSL read error
-    if (nread < 0) {
-        int ssl_err = SSL_get_error(cl->ssl, nread);
-        switch (ssl_err) {
-            case SSL_ERROR_ZERO_RETURN:
-                printf("Client %s disconnected\n", cl->name);
-                break;
-            case SSL_ERROR_SYSCALL:
-                perror("SSL read error (syscall)");
-                break;
-            case SSL_ERROR_SSL:
-                ERR_print_errors_fp(stderr);
-                break;
-            default:
-                fprintf(stderr, "Unknown SSL read error: %d\n", ssl_err);
-                break;
-        }
-        
-        // Common cleanup for all error cases
-        snprintf(getter, MAX, "%s", cl->name);
-        SSL_shutdown(cl->ssl);
-        SSL_free(cl->ssl);
-        close(cl->sock);
-        LIST_REMOVE(cl, clients);
-        free(cl);
-        usernum--;
-        gotgot = 1;
-        
-        return 1;
-    }
-    printf("%s",cl->name);
-    // Increment from pointer
-    cl->friptr += nread;
-    if (cl->friptr < &cl->fr[MAX]) {
-        return 0; // waiting for buffer to be full
-    }
-    cl->friptr = cl->fr;
-
-    // If new connection
-    if (cl->name[0] == '*') {
-        // Copy over nickname
-        snprintf(cl->name, MAX, "%s", cl->fr);
-        // Check that nickname
-        if (0 == check_name(cl, &client_list)) {
-            snprintf(cl->to, MAX, "Nickname accepted!\n");
-            cl->tooptr = cl->to;
-            acflg = 1;
-        } else {
-            // When name already exists
-            snprintf(getter, MAX, "%s", cl->name);
-            SSL_shutdown(cl->ssl);
-            SSL_free(cl->ssl);
-            close(cl->sock);
-            LIST_REMOVE(cl, clients);
-            free(cl);
-            usernum--;
-            gotgot = 1;
-            
-            return 1;
-        }
-    }
-
-    // Broadcast message to all clients
-    struct client *other;
-    LIST_FOREACH(other, head, clients) {
-        if (gotgot == 0) {
-            if (other != cl) {
-                if (acflg == 0) {
-                    snprintf(other->to, MAX, "%s:%s", cl->name, cl->fr);
-                    other->tooptr = other->to;
-                } else if (acflg == 1) {
-                    snprintf(other->to, MAX, "%s:has joined the chat", cl->name);
-                    other->tooptr = other->to;
-                }
-            }
-        } else {
-            snprintf(other->to, MAX, "%s:has disconnected", getter);
-            other->tooptr = other->to;
-            gotgot = 0;
-            snprintf(cl->to, MAX, "%s:has disconnected", getter);
-            cl->tooptr = cl->to;
-            gotgot = 0;
-        }
-    }
-
-    return 0;
-}
-
-// SSL-secured write function
-void write_to_client(struct client *cl) {
-    // Attempt to write remaining data in the buffer
-    int nwritten = SSL_write(cl->ssl, cl->tooptr, &cl->to[MAX] - cl->tooptr);
-
-    // Check for SSL write error
-    if (nwritten < 0) {
-        int ssl_err = SSL_get_error(cl->ssl, nwritten);
-        switch (ssl_err) {
-            case SSL_ERROR_ZERO_RETURN:
-                printf("SSL connection closed\n");
-                break;
-            case SSL_ERROR_SYSCALL:
-                perror("SSL write error (syscall)");
-                break;
-            case SSL_ERROR_SSL:
-                ERR_print_errors_fp(stderr);
-                break;
-            default:
-                fprintf(stderr, "Unknown SSL write error: %d\n", ssl_err);
-                break;
-        }
-        
-        // Cleanup
-        SSL_shutdown(cl->ssl);
-        SSL_free(cl->ssl);
-        close(cl->sock);
-        return;
-    }
-
-    // Move the write pointer forward by the number of bytes written
-    cl->tooptr += nwritten;
-}
-*/
 // Rest of the code remains the same as in your original implementation, with these key changes:
 int handle_client_message(struct client *cl, struct listhead *head) {
     int nread;
@@ -400,16 +271,16 @@ int handle_client_message(struct client *cl, struct listhead *head) {
     printf("Received message (length %d): '%s'\n", nread, message_buffer);
 
     // Explicitly check if this is the first message (nickname)
-    if (strcmp(cl->name, "*") == 0) {
+    if (cl->name[0]== "*") {
         // Trim whitespace and newline
         char *trimmed = message_buffer;
         while (*trimmed && (*trimmed == ' ' || *trimmed == '\n')) trimmed++;
-        char *end = trimmed + strlen(trimmed) - 1;
+        char *end = trimmed + strnlen(trimmed,MAX) - 1;
         while (end > trimmed && (*end == ' ' || *end == '\n')) *end-- = '\0';
 
         printf("Attempting to register nickname: '%s'\n", trimmed);
 
-        if (strlen(trimmed) == 0) {
+        if (strnlen(trimmed,MAX) == 0) {
             printf("Empty nickname, rejecting\n");
             
             SSL_shutdown(cl->ssl);
@@ -435,10 +306,7 @@ int handle_client_message(struct client *cl, struct listhead *head) {
                             snprintf(other->to, MAX, "%s:has joined the chat", cl->name);
                             other->tooptr = other->to;  
                             write_to_client(cl);                          
-                        } else  {
-                            //snprintf(other->to, MAX, "%s:%s", cl->name, cl->fr);
-                            //other->tooptr = other->to;
-                        }
+                        } 
                 }
                     
             
@@ -477,7 +345,7 @@ int handle_client_message(struct client *cl, struct listhead *head) {
 
 int write_to_client(struct client *cl, struct listhead * head) {
     int total_written = 0;
-    int remaining = strlen(cl->to);
+    int remaining = strnlen(cl->to,MAX);
     
     if (remaining == 0) {
         // No data to write
@@ -609,7 +477,7 @@ int main(int argc, char **argv) {
         LIST_FOREACH(cl, &new_client_list, clients)  {
             FD_SET(cl->sock, &readfds);
             // Only set write if there's data to send
-            if (strlen(cl->to) > 0) { 
+            if (strnlen(cl->to,MAX) > 0) { 
                 FD_SET(cl->sock, &writefds);
             }
             if (cl->sock > nfds) {

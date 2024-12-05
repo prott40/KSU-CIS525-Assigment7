@@ -27,7 +27,7 @@ SSL_CTX *create_client_context()
         exit(1);
     }
 
-    // Optional: Add error checking and path flexibility
+    
     const char *cert_path = "./client.crt";
     const char *key_path = "./client.key";
     const char *ca_path = "./ca.crt";
@@ -240,7 +240,7 @@ int main() {
                 if (fgets(s_out, sizeof(s_out), stdin) != NULL) {
                     s_out[strcspn(s_out, "\n")] = '\0';
                     
-                    int write_result = SSL_write(ssl, s_out, strlen(s_out));
+                    int write_result = SSL_write(ssl, s_out, MAX);
 
                 if (write_result <= 0) {
                     int ssl_err = SSL_get_error(ssl, write_result);
@@ -248,7 +248,6 @@ int main() {
                     switch (ssl_err) {
                         case SSL_ERROR_WANT_WRITE:
                             printf("SSL connection not ready to write. Retrying...\n");
-                            // You might want to implement a retry mechanism or wait
                             break;
                         case SSL_ERROR_WANT_READ:
                             printf("SSL needs to read before writing\n");

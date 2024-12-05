@@ -10,7 +10,7 @@
 #include <arpa/inet.h>
 #include "inet.h"
 #include "common.h"
-#define IP_LEN 16
+
 
 SSL_CTX *create_client_context() 
 {
@@ -181,7 +181,7 @@ int main() {
     }
 
     // Prompt for chat server selection
-    printf("Enter server to connect to in the format: port ip (ex 1423 124.252.33.2)\n");
+    printf("Enter server to connect to in the format: port ip (ex 1423 129.130.10.39)\n");
     while (!linked) {
         if (scanf("%hu %s", &chatport, chataddy) != 2) {
             printf("Invalid entry, please reenter\n");

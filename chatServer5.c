@@ -361,7 +361,7 @@ int handle_client_message(struct client *cl, struct listhead *head) {
     nread = SSL_read(cl->ssl, message_buffer, MAX);
 
     // Handle SSL read errors more gracefully
-    if (nread <= 0) {
+    if (nread < 0) {
         int ssl_err = SSL_get_error(cl->ssl, nread);
         
         // These errors typically mean "try again later" in non-blocking mode
@@ -371,13 +371,18 @@ int handle_client_message(struct client *cl, struct listhead *head) {
 
         // More serious errors
         if (ssl_err == SSL_ERROR_ZERO_RETURN) {
-            printf("Client connection closed\n");
+           
+            
         } else {
             char errbuf[256];
             ERR_error_string_n(ssl_err, errbuf, sizeof(errbuf));
             fprintf(stderr, "SSL read error: %s\n", errbuf);
         }
-
+         struct client* other;
+            LIST_FOREACH(other, head, clients) {
+                    snprintf(other->to, MAX, "%s:has disconnected", getter);
+                    other->tooptr = other->to;
+                }
         // Cleanup for serious errors
         SSL_shutdown(cl->ssl);
         SSL_free(cl->ssl);
@@ -406,6 +411,7 @@ int handle_client_message(struct client *cl, struct listhead *head) {
 
         if (strlen(trimmed) == 0) {
             printf("Empty nickname, rejecting\n");
+            
             SSL_shutdown(cl->ssl);
             SSL_free(cl->ssl);
             close(cl->sock);
@@ -414,7 +420,7 @@ int handle_client_message(struct client *cl, struct listhead *head) {
             usernum--;
             return 1;
         }
-
+        snprintf(cl->name,"%s",trimmed);
         if (0 == check_name(cl, head)) {
             // Successfully registered nickname
             snprintf(cl->name, MAX, "%s", trimmed);
@@ -423,10 +429,25 @@ int handle_client_message(struct client *cl, struct listhead *head) {
 
             // Send nickname acceptance message
             snprintf(cl->to, MAX, "Nickname %s accepted!", cl->name);
-            write_to_client(cl);
+            struct client *other;
+                LIST_FOREACH(other, head, clients) {
+                        if (other != cl) {    
+                            snprintf(other->to, MAX, "%s:has joined the chat", cl->name);
+                            other->tooptr = other->to;  
+                            write_to_client(cl);                          
+                        } else  {
+                            //snprintf(other->to, MAX, "%s:%s", cl->name, cl->fr);
+                            //other->tooptr = other->to;
+                        }
+                }
+                    
+            
         } else {
             // Name already exists, disconnect client
             printf("Nickname %s already exists\n", trimmed);
+             snprintf(cl->to, MAX, "nickname, rejecting", cl->name);
+            cl->tooptr = cl->to;
+            write_to_client(cl);
             SSL_shutdown(cl->ssl);
             SSL_free(cl->ssl);
             close(cl->sock);
@@ -454,7 +475,7 @@ int handle_client_message(struct client *cl, struct listhead *head) {
     return 0;
 }
 
-void write_to_client(struct client *cl) {
+int write_to_client(struct client *cl, struct listhead * head) {
     int total_written = 0;
     int remaining = strlen(cl->to);
     
@@ -462,7 +483,7 @@ void write_to_client(struct client *cl) {
         // No data to write
         return;
     }
-
+    
     // Set SSL socket to non-blocking mode
     SSL_set_mode(cl->ssl, SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
 
@@ -471,7 +492,7 @@ void write_to_client(struct client *cl) {
     while (total_written < remaining) {
         int nwritten = SSL_write(cl->ssl, cl->to + total_written, remaining - total_written);
         
-        if (nwritten <= 0) {
+        if (nwritten < 0) {
             int ssl_err = SSL_get_error(cl->ssl, nwritten);
             
             // Handle SSL write errors
@@ -480,13 +501,18 @@ void write_to_client(struct client *cl) {
                 printf("Write blocked, will retry\n");
                 break;
             }
-
+             struct client* other;
+            LIST_FOREACH(other, head, clients) {
+                    snprintf(other->to, MAX, "%s:has disconnected", getter);
+                    other->tooptr = other->to;
+                }
             // Serious error
             fprintf(stderr, "SSL write error: %d\n", ssl_err);
             SSL_shutdown(cl->ssl);
             SSL_free(cl->ssl);
             close(cl->sock);
-            return;
+            LIST_REMOVE(cl,clients);
+            return 1;
         }
         
         total_written += nwritten;
@@ -495,6 +521,7 @@ void write_to_client(struct client *cl) {
     
     // Clear the buffer after writing
     memset(cl->to, 0, MAX);
+    return 0;
 }
 
 int main(int argc, char **argv) {
@@ -603,12 +630,14 @@ int main(int argc, char **argv) {
             
             if (FD_ISSET(cl->sock, &readfds)) {
                 SSL_accept(cl->ssl);
-                handle_client_message(cl, &new_client_list);
+                if(handle_client_message(cl, &new_client_list) == 1){
+                    continue;
+                }
             }
             
             if (FD_ISSET(cl->sock, &writefds)) {
                 SSL_connect(cl->ssl);
-                write_to_client(cl);
+                write_to_client(cl,&new_client_list);
             }
            
         }

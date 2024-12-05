@@ -1,9 +1,10 @@
 Gennette Brown, Pedro Alcantar-Mendez, Preston Rottinghaus
-
-directoryServer CN - Directory Server
-KSUFootball CN - Chat Server - KSU Football
-KSUGaming CN -  Chat Server - KSU Gaming
-KSUCIS525 CN - Chat Server - KSU CIS525
+topic names      ------   server types
+directoryServer    CN - Directory Server
+KSUFootball        CN - Chat Server - KSU Football
+KSUGaming          CN -  Chat Server - KSU Gaming
+KSUCIS525          CN - Chat Server - KSU CIS525
+client             CN - Chat Client - client
 
 1. Copy the files to your own directory.
 
@@ -16,13 +17,13 @@ KSUCIS525 CN - Chat Server - KSU CIS525
 4. Start the directory servers in the background: ./directoryServer5 &
 
 5. Start the chat server in the back ground with 2 comand line arguments. The first is the single  
-   word topic name, and the second is the socket number you will want it to listen on above 40000 but less than 65535, you will set it in the background ex: ./chatServer5 test 40985 &
+   word topic name provided above, and the second is the socket number you will want it to listen on above 40000 but less than 65535,
+   you will set it in the background ex: ./chatServer5 test 40985 &
 
 6. Start the client on the same or another host in the foreground: ./chatClient5
 
-7. To connect the client to a server you must input a port and ip from the list, then will connect 
-   you to that topic server.
+7.you will get a list of the availabe servers, you must enter that servers port followed by the inet.h server address
 
-8. All spaces must be replaced usg an '_', 
+8. send messages acrossed the clients comunicating with eachother
 
 9. Remember to kill the server before logging off.

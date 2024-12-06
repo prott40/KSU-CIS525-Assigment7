@@ -96,9 +96,12 @@ int connect_to_directory_server(SSL_CTX *ctx) {
 
     // Read server list
     int bytes = SSL_read(ssl, list, sizeof(list) - 1);
-    if (bytes > 0) {
+    if (bytes > 0) 
+    {
         list[bytes] = '\0'; // Null-terminate the received string
-        printf("Available Chat Servers:\n%s\n", list);
+
+
+        printf("Available Chat Servers:\n%s\n",list);
     } else {
         fprintf(stderr, "Failed to retrieve server list.\n");
         ERR_print_errors_fp(stderr);
@@ -181,7 +184,7 @@ int main() {
     }
 
     // Prompt for chat server selection
-    printf("Enter server to connect to in the format: port ip (ex 1423 129.130.10.39)\n");
+    printf("Enter server to connect to in the format: <Port> <Host IP> (Ex: 44332 129.130.10.39)\n");
     while (!linked) {
         if (scanf("%hu %s", &chatport, chataddy) != 2) {
             printf("Invalid entry, please reenter\n");

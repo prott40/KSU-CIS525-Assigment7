@@ -16,7 +16,6 @@ int sockfd, nfds, activity;
 struct sockaddr_in serv_addr, cli_addr;
 fd_set readfds, writefds;
 int usernum, gotgot;
-char getter[MAX];
 // Structure to represent a connected client
 struct client {
     int sock; // Socket descriptor
@@ -214,6 +213,7 @@ void handle_new_connection(SSL_CTX *ctx, int sock_fd, struct listhead *head, int
         snprintf(new_client->to, MAX, "%s", firstuser);
         new_client->tooptr = new_client->to;
     }
+
     else{
         snprintf(new_client->to, MAX, "%s", getuser);
         new_client->tooptr = new_client->to;
@@ -240,20 +240,27 @@ int handle_client_message(struct client *cl, struct listhead *head) {
             return 0;  // Not an error, just not ready
         }
 
+        char errbuf[256];
         // More serious errors
-        if (ssl_err == SSL_ERROR_ZERO_RETURN) {
-           
+        if (ssl_err == SSL_ERROR_ZERO_RETURN) 
+        {
+           fprintf(ssl_err,"Zero Returned Error %s\n", errbuf);
             
-        } else {
-            char errbuf[256];
+        } 
+        else 
+        {
+            // char errbuf[256];
             ERR_error_string_n(ssl_err, errbuf, sizeof(errbuf));
             fprintf(stderr, "SSL read error: %s\n", errbuf);
         }
+
          struct client* other;
-            LIST_FOREACH(other, head, clients) {
-                    snprintf(other->to, MAX, "%s:has disconnected", getter);
+            LIST_FOREACH(other, head, clients) 
+            {       
+                    snprintf(other->to, MAX, "%s:has disconnected", cl->name); //changed getter to other->name
                     other->tooptr = other->to;
-                }
+            }
+
         // Cleanup for serious errors
         SSL_shutdown(cl->ssl);
         SSL_free(cl->ssl);
@@ -374,11 +381,12 @@ int write_to_client(struct client *cl, struct listhead * head) {
                 printf("Write blocked, will retry\n");
                 break;
             }
-             struct client* other;
-            LIST_FOREACH(other, head, clients) {
-                    snprintf(other->to, MAX, "%s:has disconnected", getter);
-                    other->tooptr = other->to;
-                }
+            struct client* other;
+            LIST_FOREACH(other, head, clients) 
+            {
+                snprintf(other->to , MAX, "%s:has disconnected", cl->name); //changed getter to other->name
+                other->tooptr = other->to;
+            }
             // Serious error
             fprintf(stderr, "SSL write error: %d\n", ssl_err);
             SSL_shutdown(cl->ssl);
@@ -481,6 +489,7 @@ int main(int argc, char **argv) {
         struct client *cl;
         LIST_FOREACH(cl, &new_client_list, clients)  {
             FD_SET(cl->sock, &readfds);
+
             // Only set write if there's data to send
             if (strnlen(cl->to,MAX) > 0) { 
                 FD_SET(cl->sock, &writefds);

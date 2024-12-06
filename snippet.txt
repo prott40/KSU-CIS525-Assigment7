@@ -1,0 +1,133 @@
+/*
+Code snippet taken from Line 222 from ChatServer5.c
+
+int handle_client_message(struct client *cl, struct client_list *head)  {
+    int acflg = 0;
+    int nread;
+
+    // Use SSL_read instead of read
+    nread = SSL_read(cl->ssl, cl->friptr, &cl->fr[MAX] - cl->friptr);
+
+    // Check for SSL read error
+    if (nread < 0) {
+        int ssl_err = SSL_get_error(cl->ssl, nread);
+        switch (ssl_err) {
+            case SSL_ERROR_ZERO_RETURN:
+                printf("Client %s disconnected\n", cl->name);
+                break;
+            case SSL_ERROR_SYSCALL:
+                perror("SSL read error (syscall)");
+                break;
+            case SSL_ERROR_SSL:
+                ERR_print_errors_fp(stderr);
+                break;
+            default:
+                fprintf(stderr, "Unknown SSL read error: %d\n", ssl_err);
+                break;
+        }
+        
+        // Common cleanup for all error cases
+        snprintf(getter, MAX, "%s", cl->name);
+        SSL_shutdown(cl->ssl);
+        SSL_free(cl->ssl);
+        close(cl->sock);
+        LIST_REMOVE(cl, clients);
+        free(cl);
+        usernum--;
+        gotgot = 1;
+        
+        return 1;
+    }
+    printf("%s",cl->name);
+    // Increment from pointer
+    cl->friptr += nread;
+    if (cl->friptr < &cl->fr[MAX]) {
+        return 0; // waiting for buffer to be full
+    }
+    cl->friptr = cl->fr;
+
+    // If new connection
+    if (cl->name[0] == '*') {
+        // Copy over nickname
+        snprintf(cl->name, MAX, "%s", cl->fr);
+        // Check that nickname
+        if (0 == check_name(cl, &client_list)) {
+            snprintf(cl->to, MAX, "Nickname accepted!\n");
+            cl->tooptr = cl->to;
+            acflg = 1;
+        } else {
+            // When name already exists
+            snprintf(getter, MAX, "%s", cl->name);
+            SSL_shutdown(cl->ssl);
+            SSL_free(cl->ssl);
+            close(cl->sock);
+            LIST_REMOVE(cl, clients);
+            free(cl);
+            usernum--;
+            gotgot = 1;
+            
+            return 1;
+        }
+    }
+
+    // Broadcast message to all clients
+    struct client *other;
+    LIST_FOREACH(other, head, clients) {
+        if (gotgot == 0) {
+            if (other != cl) {
+                if (acflg == 0) {
+                    snprintf(other->to, MAX, "%s:%s", cl->name, cl->fr);
+                    other->tooptr = other->to;
+                } else if (acflg == 1) {
+                    snprintf(other->to, MAX, "%s:has joined the chat", cl->name);
+                    other->tooptr = other->to;
+                }
+            }
+        } else {
+            snprintf(other->to, MAX, "%s:has disconnected", getter);
+            other->tooptr = other->to;
+            gotgot = 0;
+            snprintf(cl->to, MAX, "%s:has disconnected", getter);
+            cl->tooptr = cl->to;
+            gotgot = 0;
+        }
+    }
+
+    return 0;
+}
+
+// SSL-secured write function
+void write_to_client(struct client *cl) {
+    // Attempt to write remaining data in the buffer
+    int nwritten = SSL_write(cl->ssl, cl->tooptr, &cl->to[MAX] - cl->tooptr);
+
+    // Check for SSL write error
+    if (nwritten < 0) {
+        int ssl_err = SSL_get_error(cl->ssl, nwritten);
+        switch (ssl_err) {
+            case SSL_ERROR_ZERO_RETURN:
+                printf("SSL connection closed\n");
+                break;
+            case SSL_ERROR_SYSCALL:
+                perror("SSL write error (syscall)");
+                break;
+            case SSL_ERROR_SSL:
+                ERR_print_errors_fp(stderr);
+                break;
+            default:
+                fprintf(stderr, "Unknown SSL write error: %d\n", ssl_err);
+                break;
+        }
+        
+        // Cleanup
+        SSL_shutdown(cl->ssl);
+        SSL_free(cl->ssl);
+        close(cl->sock);
+        return;
+    }
+
+    // Move the write pointer forward by the number of bytes written
+    cl->tooptr += nwritten;
+}
+*/
+// Rest of the code remains the same as in your original implementation, with these key changes:

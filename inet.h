@@ -12,11 +12,7 @@
 
 
 /* Change the following to something above 40000 but less than 65535 */
-<<<<<<< HEAD
-#define SERV_TCP_PORT 41236
-=======
-#define SERV_TCP_PORT 55321
->>>>>>> fixing-handle-client
+#define SERV_TCP_PORT 55322
 
 /* Change the following to be your host addr: 129.130.10.43 for viper and 129.130.10.39 for cougar */
 #define SERV_HOST_ADDR "129.130.10.39"

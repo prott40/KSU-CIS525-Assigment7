@@ -11,10 +11,6 @@
 #include "inet.h"
 #include "common.h"
 
-<<<<<<< HEAD
-=======
-
->>>>>>> fixing-handle-client
 SSL_CTX *create_client_context() 
 {
     SSL_library_init();
@@ -30,11 +26,7 @@ SSL_CTX *create_client_context()
         exit(1);
     }
 
-<<<<<<< HEAD
-    // Optional: Add error checking and path flexibility
-=======
     
->>>>>>> fixing-handle-client
     const char *cert_path = "./client.crt";
     const char *key_path = "./client.key";
     const char *ca_path = "./ca.crt";
@@ -65,15 +57,8 @@ SSL_CTX *create_client_context()
 int connect_to_directory_server(SSL_CTX *ctx) {
     int sockfd;
     struct sockaddr_in dir_addr;
-<<<<<<< HEAD
-    char s_in[MAX] = {'\0'};
-    char s_out[MAX] = {'\0'};
-    char list[500] = {'\0'};
-    char msg[500] = "Input selection from list";
-=======
     //char s_in[MAX] = {'\0'};
     char list[500] = {'\0'};
->>>>>>> fixing-handle-client
 
     // Set up directory server address
     memset((char *) &dir_addr, 0, sizeof(dir_addr));
@@ -106,18 +91,6 @@ int connect_to_directory_server(SSL_CTX *ctx) {
     }
 
     // Request server list
-<<<<<<< HEAD
-    SSL_write(ssl, "GET_SERVERS", strlen("GET_SERVERS"));
-
-    // Read server list
-    memset(list, 0, sizeof(list));
-    int bytes = SSL_read(ssl, list, sizeof(list) - 1);
-    if (bytes > 0) {
-        list[bytes] = '\0';
-        printf("Available Chat Servers:\n%s\n", list);
-    }
-
-=======
     SSL_write(ssl, "&", MAX);
 
     // Read server list
@@ -133,22 +106,14 @@ int connect_to_directory_server(SSL_CTX *ctx) {
         ERR_print_errors_fp(stderr);
     }
 
->>>>>>> fixing-handle-client
     // Keep the SSL connection open for further interactions if needed
     return sockfd;
 }
 
-<<<<<<< HEAD
-int connect_to_chat_server(SSL_CTX *ctx, const char *chataddy, unsigned short chatport) {
-    int sersockfd;
-    struct sockaddr_in serv_addr;
-    SSL *ssl = NULL;
-=======
 int connect_to_chat_server(SSL *ssl, const char *chataddy, unsigned short chatport) {
     int sersockfd;
     struct sockaddr_in serv_addr;
     
->>>>>>> fixing-handle-client
 
     // Create socket
     if ((sersockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -157,33 +122,19 @@ int connect_to_chat_server(SSL *ssl, const char *chataddy, unsigned short chatpo
     }
 
     // Set up chat server address
-<<<<<<< HEAD
-    memset((char *) &serv_addr, 0, sizeof(serv_addr));
-=======
     memset(&serv_addr, 0, sizeof(serv_addr));
->>>>>>> fixing-handle-client
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = inet_addr(chataddy);
     serv_addr.sin_port = htons(chatport);
 
     // Connect to chat server
-<<<<<<< HEAD
-    if (connect(sersockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
-=======
     if (connect(sersockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
->>>>>>> fixing-handle-client
         perror("client: can't connect to chat server");
         close(sersockfd);
         return -1;
     }
 
     // Establish SSL connection
-<<<<<<< HEAD
-    ssl = SSL_new(ctx);
-    SSL_set_fd(ssl, sersockfd);
-
-    if (SSL_connect(ssl) <= 0) {
-=======
     
     if (!ssl) {
         fprintf(stderr, "SSL_new failed.\n");
@@ -194,7 +145,6 @@ int connect_to_chat_server(SSL *ssl, const char *chataddy, unsigned short chatpo
     SSL_set_fd(ssl, sersockfd);
     if (SSL_connect(ssl) <= 0) {
         fprintf(stderr, "SSL_connect failed:\n");
->>>>>>> fixing-handle-client
         ERR_print_errors_fp(stderr);
         SSL_free(ssl);
         close(sersockfd);
@@ -207,12 +157,9 @@ int connect_to_chat_server(SSL *ssl, const char *chataddy, unsigned short chatpo
     if (welcome_len > 0) {
         welcome[welcome_len] = '\0';
         printf("%s\n", welcome);
-<<<<<<< HEAD
-=======
     } else {
         fprintf(stderr, "SSL_read failed:\n");
         ERR_print_errors_fp(stderr);
->>>>>>> fixing-handle-client
     }
 
     return sersockfd;
@@ -236,11 +183,7 @@ int main() {
     }
 
     // Prompt for chat server selection
-<<<<<<< HEAD
-    printf("Enter server to connect to in the format: port ip (ex 1423 124.252.33.2)\n");
-=======
     printf("Enter server to connect to in the format: <Port> <Host IP> (Ex: 44332 129.130.10.39)\n");
->>>>>>> fixing-handle-client
     while (!linked) {
         if (scanf("%hu %s", &chatport, chataddy) != 2) {
             printf("Invalid entry, please reenter\n");
@@ -264,12 +207,8 @@ int main() {
     }
 
     // Connect to selected chat server
-<<<<<<< HEAD
-    int sersockfd = connect_to_chat_server(ctx, chataddy, chatport);
-=======
     SSL *ssl = SSL_new(ctx);
     int sersockfd = connect_to_chat_server(ssl, chataddy, chatport);
->>>>>>> fixing-handle-client
     if (sersockfd < 0) {
         fprintf(stderr, "Failed to connect to chat server\n");
         SSL_CTX_free(ctx);
@@ -280,19 +219,12 @@ int main() {
     fd_set readset;
     char s_out[MAX] = {'\0'};
     char s_in[MAX] = {'\0'};
-<<<<<<< HEAD
-    SSL *ssl = SSL_new(ctx);
-    SSL_set_fd(ssl, sersockfd);
-
-    for (;;) {
-=======
     
     
     fcntl(sersockfd, F_SETFL, O_NONBLOCK);
     
 
    for (;;) {
->>>>>>> fixing-handle-client
         FD_ZERO(&readset);
         FD_SET(STDIN_FILENO, &readset);
         FD_SET(sersockfd, &readset);
@@ -303,15 +235,6 @@ int main() {
         if (select(sersockfd + 1, &readset, NULL, NULL, NULL) > 0) {
             // Check user input
             if (FD_ISSET(STDIN_FILENO, &readset)) {
-<<<<<<< HEAD
-                if (fgets(s_out, sizeof(s_out), stdin) != NULL) {
-                    // Remove newline
-                    s_out[strcspn(s_out, "\n")] = '\0';
-                    SSL_write(ssl, s_out, strlen(s_out));
-                } else {
-                    printf("Error reading user input\n");
-                    break;
-=======
                  int ssl_connect_result = SSL_connect(ssl);
                     if(ssl_connect_result < 0){
                         printf("SSL Handshake failedy\n");
@@ -342,19 +265,15 @@ int main() {
                             break;
                     }
                 }
->>>>>>> fixing-handle-client
                 }
             }
 
             // Check server messages
             if (FD_ISSET(sersockfd, &readset)) {
-<<<<<<< HEAD
-=======
                 int ssl_connect_result = SSL_accept(ssl);
                     if(ssl_connect_result < 0){
                         printf("SSL Handshake failedy\n");
                     }
->>>>>>> fixing-handle-client
                 int bytes = SSL_read(ssl, s_in, sizeof(s_in) - 1);
                 if (bytes <= 0) {
                     printf("Server has shut down\n");

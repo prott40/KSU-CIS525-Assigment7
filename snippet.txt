@@ -130,4 +130,3 @@ void write_to_client(struct client *cl) {
     cl->tooptr += nwritten;
 }
 */
-// Rest of the code remains the same as in your original implementation, with these key changes:

@@ -13,7 +13,7 @@
 struct chat_server 
 {
     char name[MAX]; // Chat room name (e.g., "KSU Football")
-    char address[MAX]; // Chat server address (IP:port)
+    int address; // Chat server address (IP:port)
     LIST_ENTRY(chat_server) servers; // List link
 };
 
@@ -80,44 +80,66 @@ int setup_server_socket(int port, const char *host_addr) {
     return sock;
 }
 
-//Fix later
+//Currently
 void handle_client_request(SSL *ssl) {
     char buffer[MAX] = "";
+    char concatted[MAX] = ""; 
     struct chat_server *server;
-    LIST_FOREACH(server, &server_list, servers) {
-        strncat(buffer, server->name, sizeof(buffer) - strlen(buffer) - 1);
-        strncat(buffer, " - ", sizeof(buffer) - strlen(buffer) - 1);
-        strncat(buffer, server->address, sizeof(buffer) - strlen(buffer) - 1);
-        strncat(buffer, "\n", sizeof(buffer) - strlen(buffer) - 1);
+    LIST_FOREACH(server, &server_list, servers) 
+    {
+        snprintf(buffer, MAX, "%s-%d\n",
+                 server->name, 
+                 server->address);
+                 //SSL_write(ssl, buffer, MAX);
+        // printf("buffer: %s\n", buffer);
+        strcat(concatted,buffer); //pedro code
+        // printf("concatted: \n%s\n", concatted);
     }
-    SSL_write(ssl, buffer, strlen(buffer));
+    //snprintf(concatted,MAX, "&"); //
+    SSL_write(ssl,concatted,MAX);// signifies end on list
+    
 }
+
 
 //handles registrations with 
 void handle_registration(SSL *ssl) {
     char buffer[MAX];
-    int bytes = SSL_read(ssl, buffer, sizeof(buffer) - 1);
+    int bytes = SSL_read(ssl, buffer, MAX);
     if (bytes <= 0) {
         fprintf(stderr, "Error reading registration information.\n");
         return;
     }
+    
     buffer[bytes] = '\0';
+    char name[40];
+    int address;
+    if (sscanf(buffer, "%49[^:]:%d", name, &address) == 2) 
+    {
+    printf("name = '%s', address = %d\n", name, address);
+    } 
 
-    char *name = strtok(buffer, ":");
-    char *address = strtok(NULL, ":");
+    else {
+        printf("Parsing failed!\n");
+    }
+   
     if (!name || !address) {
         fprintf(stderr, "Invalid registration format.\n");
-        SSL_write(ssl, "Registration failed.\n", 21);
+        SSL_write(ssl, "Registration failed.\n", MAX);
         return;
     }
 
     struct chat_server *new_server = malloc(sizeof(struct chat_server));
-    snprintf(new_server->name, sizeof(new_server->name), "%s", name);
-    snprintf(new_server->address, sizeof(new_server->address), "%s", address);
+    
+    //Set the name and address
+    new_server->address = address;
+    snprintf(new_server->name, MAX, "%s", name);
+
+    //snprintf(new_server->address, MAX, "%d", address); //commented out
     LIST_INSERT_HEAD(&server_list, new_server, servers);
 
-    printf("Registered chat server: %s (%s)\n", new_server->name, new_server->address);
+    printf("Registered chat server: %s (%d) \n", new_server->name, new_server->address);
     SSL_write(ssl, "Registration successful.\n", 25);
+
 }
 
 int main() {
@@ -178,14 +200,19 @@ int main() {
 
             // Read initial command
             char buffer[MAX];
-            int bytes = SSL_read(ssl, buffer, sizeof(buffer) - 1);
+            int bytes = SSL_read(ssl, buffer, MAX);
             if (bytes > 0) {
                 buffer[bytes] = '\0';
-                if (strcmp(buffer, "REGISTER") == 0) {
+                if (buffer[0] == '*') 
+                {
                     handle_registration(ssl);
-                } else if (strcmp(buffer, "GET_SERVERS") == 0) {
+                }
+                else if (buffer[0] == '&')
+                {
                     handle_client_request(ssl);
-                } else {
+                } 
+                else 
+                {
                     fprintf(stderr, "Unknown command: %s\n", buffer);
                 }
             }
